@@ -79,20 +79,42 @@ Branch:
        Σ ⊢ if e { then } else { else } : Σ₁
 ```
 
-This maps to derivations in the [Simply Typed Lambda Calculus](https://en.wikipedia.org/wiki/Simply_typed_lambda_calculus): peripheral state environments are typing contexts, typestate signatures are function types, and verification is type derivation.
+This maps to derivations in the [Simply Typed Lambda Calculus](https://en.wikipedia.org/wiki/Simply_typed_lambda_calculus) and [System F](https://en.wikipedia.org/wiki/System_F): peripheral state environments are typing contexts, typestate signatures are function types, parametric typestates correspond to bounded type variables, and verification is type derivation.
 
 Future work includes formalising this in Lean.
 
-## Current Status
-- [x] Control flow (if/else, while, return)
-- [x] Function declarations and calls
-- [x] Peripheral declarations and MMIO access
-- [x] Function typestate signatures and verification
-- [x] RISC-V (32 bit) backend
-- [ ] More Operators (arithmetic, bitwise, comparison)
-- [ ] Extended Type system (bool, u8/u16/u32, type checking)
-- [ ] Inline assembly for special instructions
-- [ ] Critical sections / atomic blocks for interrupt safety
+### Parametric Typestates
+
+Peri supports parametric typestates, allowing functions to express their state transitions on a range of states.
+
+```rust
+typestate CanSetDLAB = LCRSet & !DLABSet | Ready & !DLABSet;
+
+fn uart_set_lcr_dlab()<S as CanSetDLAB> :: UART<S> -> UART<S & DLABSet> {
+    UART::LCR = UART::LCR | LCR_DLAB;
+}
+
+fn uart_clear_dlab()<S includes DLABSet> :: UART<S> -> UART<S & !DLABSet> {
+    UART::LCR = UART::LCR & ~LCR_DLAB;
+}
+```
+
+- `S` represents the peripheral's current state
+- The bounds `as` and `includes` constrain which states a function may be called with
+- `&`, `|` and `!` create state combinations over a Boolean algebra
+
+```
+X = State variable
+B = State bound
+S = Current state
+
+Parametric Call:
+    Σ(P) = S    S ⊨ B(X)    sig(F) = ⟨X : B⟩ P<X> → P<out(X)>
+    ─────────────────────────────────────────────────────────
+              Σ[P ↦ S] ⊢ f() : Σ[P ↦ out(S)]
+```
+
+These allow drivers to declare state-dependent operations much more expressively than other languages, very cool 😎
 
 ## Installation and Usage
 
@@ -101,6 +123,6 @@ Requires Rust toolchain (rustc + cargo).
 ```sh
 git clone https://github.com/aqibfaruqui/peri
 cd peri
-cargo build --release
-cargo run input.peri output.s
+cargo install --path .
+peric -S input.peri output.s
 ```
